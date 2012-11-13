@@ -1,0 +1,7 @@
+.out
+modload
+modunload
+.symvers
+.order
+.ko
+.s
