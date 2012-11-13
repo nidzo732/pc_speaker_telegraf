@@ -1,28 +1,28 @@
-#include <linux/init.h> 		/*module_init(), module_exit(), __init, __exit*/
-#include <linux/module.h>		/*za sve module*/
-#include <linux/kdev_t.h>		/*dev_t*/
-#include <linux/errno.h>		/*makroi za greske*/
+#include <linux/init.h> 	/*module_init(), module_exit(), __init, __exit*/
+#include <linux/module.h>	/*za sve module*/
+#include <linux/kdev_t.h>	/*dev_t*/
+#include <linux/errno.h>	/*makroi za greske*/
 #include <linux/moduleparam.h>	/*module_param()*/
-#include <linux/sched.h>		/*current*/
-#include <linux/fs.h>			/*fops, alloc_chrdev_region(), unregister_chrdev_region(),*/
-#include <linux/cdev.h>			/*cdev, cdev_init, cdev_alloc, cdev_add, cdev_del*/
-#include <linux/slab.h>			/*kmalloc(), GFP_KERNEL	*/
-#include <linux/string.h>		/*strcpy(), strcat(), strlen()...*/
-#include <asm/uaccess.h>		/*copy_to_user(), copy_from_user()*/
+#include <linux/sched.h>	/*current*/
+#include <linux/fs.h>		/*fops, alloc_chrdev_region(), unregister_chrdev_region(),*/
+#include <linux/cdev.h>		/*cdev, cdev_init, cdev_alloc, cdev_add, cdev_del*/
+#include <linux/slab.h>		/*kmalloc(), GFP_KERNEL	*/
+#include <linux/string.h>	/*strcpy(), strcat(), strlen()...*/
+#include <asm/uaccess.h>	/*copy_to_user(), copy_from_user()*/
 #include <linux/semaphore.h>	/*struct semaphore, sema_init(), dow_interruptible(), up() */
-#include <linux/ioctl.h>		/*request_region()*/
-#include <linux/delay.h> 		/*msleep_interruptible()*/
-#include <linux/kthread.h>		/*task struct, kthread_create(), wake_up_process()*/
+#include <linux/ioctl.h>	/*request_region()*/
+#include <linux/delay.h> 	/*msleep_interruptible()*/
+#include <linux/kthread.h>	/*task struct, kthread_create(), wake_up_process()*/
 #include <linux/completion.h>	/*struct completion, init_completion(), complete()*/
 #include <linux/capability.h>	/*capable()	*/
-#include <linux/ioport.h>		/*inb(), outb()*/
-#include <asm/io.h>				/*-||-*/
+#include <linux/ioport.h>	/*inb(), outb()*/
+#include <asm/io.h>		/*-||-*/
 #include <linux/spinlock.h>  	/*spin_lock_irqsave(), spin_lock_irqrestore(), spinlock_t*/
 #include <linux/version.h>
-#if LINUX_VERSION_CODE>=KERNEL_VERSION(2, 6, 31)
-	#include <asm/barrier.h>			/*smp_mb()*/
+#if LINUX_VERSION_CODE<=KERNEL_VERSION(3, 3, 0)
+	#include <asm/system.h>			/*smp_mb()*/
 #else
-	#include <asm/system.h>
+	#include <asm/barrier.h>
 #endif
 
 MODULE_DESCRIPTION("Modul koji prevodi tekst unet u /dev/telegraf i\
