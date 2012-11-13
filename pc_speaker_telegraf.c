@@ -18,7 +18,12 @@
 #include <linux/ioport.h>		/*inb(), outb()*/
 #include <asm/io.h>				/*-||-*/
 #include <linux/spinlock.h>  	/*spin_lock_irqsave(), spin_lock_irqrestore(), spinlock_t*/
-#include <asm/system.h>			/*smp_mb()*/
+#include <linux/version.h>
+#if LINUX_VERSION_CODE>=KERNEL_VERSION(2, 6, 31)
+	#include <asm/barrier.h>			/*smp_mb()*/
+#else
+	#include <asm/system.h>
+#endif
 
 MODULE_DESCRIPTION("Modul koji prevodi tekst unet u /dev/telegraf i\
 reprodukuje ga preko pc zvucnika");

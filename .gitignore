@@ -1,4 +1,5 @@
 *.out
+*.o
 modload
 modunload
 *.symvers
@@ -11,3 +12,4 @@ modunload
 .cproject
 .project
 .tmp_versions
+*.mod.*
