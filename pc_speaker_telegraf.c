@@ -40,6 +40,10 @@ MODULE_LICENSE("GPL");
 #define DEFAULT_DOTLENGTH 100		
 #define DOTSLEEP msleep_interruptible(dotlength)	
 #define LETTERSLEEP msleep_interruptible(dotlength*2)
+#define CONTROLL_CODE_UPDATE_COUNTDOWN 0xb6
+#define PIT2_CONTROLL_PORT 0x43
+#define COUNTDOWN_UPDATE_PORT 0x42
+#define ON_OFF_PORT 0x61
 
 /*Prototipi funkcija*/
 static int  __init pc_speaker_telegraf_init(void);
@@ -80,8 +84,8 @@ module_exit(pc_speaker_telegraf_exit);
 static int  __init pc_speaker_telegraf_init(void)
 {
 	int errno;
-	/*if (request_region(0x61, 0x01, "controll_register")==NULL) return -ENODEV;*/
-	/*if (request_region(0x42, 0x02, "tajmer")==NULL) return -ENODEV;*/
+	//if (request_region(ON_OFF_PORT, 0x01, "controll_register")==NULL) return -ENODEV;
+	//if (request_region(COUNTDOWN_UPDATE_PORT, 0x02, "tajmer")==NULL) return -ENODEV;
 	sema_init(&write_semafor, 1);
 	sema_init(&ioctl_semafor, 1);
 	init_completion(&write_completion);
@@ -107,7 +111,7 @@ static void __exit pc_speaker_telegraf_exit(void)
 	wait_for_completion(&write_completion);
 	cdev_del(&telegraf_cdev);
 	unregister_chrdev_region(telegraf_devnum, DEVCOUNT);
-	release_region(0x61, 0x01);
+	//release_region(ON_OFF_PORT, 0x01);
 }
 
 static ssize_t telegraf_read(struct file *read_file, char __user *readbuffer, size_t read_size, loff_t *location)
@@ -201,12 +205,11 @@ static long telegraf_ioctl(struct file *telegraf_file, unsigned int ioctl_comman
 		highbyte=countdown/256;
 		lowbyte=countdown-highbyte;
 		up(&ioctl_semafor);
-		break;
+		return 0;
 		
 		case 3:
 		dotlength=ioctl_args;
 		return 0;
-		break;
 		
 		default:
 		return -ENOTTY;		
@@ -437,26 +440,26 @@ static void playdot(void)
 {
 	unsigned char value;	
 	unsigned long spinlock_flags;
-	outb(0xb6, 0x43);
+	outb(CONTROLL_CODE_UPDATE_COUNTDOWN, PIT2_CONTROLL_PORT);
 	smp_mb();
-	outb(lowbyte, 0x42);
+	outb(lowbyte, COUNTDOWN_UPDATE_PORT);
 	smp_mb();
-	outb(highbyte, 0x42);
+	outb(highbyte, COUNTDOWN_UPDATE_PORT);
 	smp_mb();
 	spin_lock_irqsave(&play_spinlock, spinlock_flags);
-	value=inb(0x61);
+	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value | 3;
 	smp_mb();
-	outb(value, 0x61);
+	outb(value, ON_OFF_PORT);
 	spin_unlock_irqrestore(&play_spinlock, spinlock_flags);
 	msleep_interruptible(dotlength);
 	spin_lock_irqsave(&play_spinlock, spinlock_flags);
-	value=inb(0x61);
+	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value & 0xfc;
 	smp_mb();
-	outb(value, 0x61);
+	outb(value, ON_OFF_PORT);
 	spin_unlock_irqrestore(&play_spinlock, spinlock_flags);
 	DOTSLEEP;
 }
@@ -465,25 +468,25 @@ static void playdash(void)
 {
 	unsigned char value;
 	unsigned long spinlock_flags;
-	outb(0xb6, 0x43);
+	outb(CONTROLL_CODE_UPDATE_COUNTDOWN, PIT2_CONTROLL_PORT);
 	smp_mb();
-	outb(lowbyte, 0x42);
+	outb(lowbyte, COUNTDOWN_UPDATE_PORT);
 	smp_mb();
-	outb(highbyte, 0x42);
+	outb(highbyte, COUNTDOWN_UPDATE_PORT);
 	spin_lock_irqsave(&play_spinlock, spinlock_flags);
-	value=inb(0x61);
+	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value | 3;
 	smp_mb();
-	outb(value, 0x61);
+	outb(value, ON_OFF_PORT);
 	spin_unlock_irqrestore(&play_spinlock, spinlock_flags);
 	msleep_interruptible(dotlength*3);
 	spin_lock_irqsave(&play_spinlock, spinlock_flags);
-	value=inb(0x61);
+	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value & 0xfc;
 	smp_mb();
-	outb(value, 0x61);
+	outb(value, ON_OFF_PORT);
 	spin_unlock_irqrestore(&play_spinlock, spinlock_flags);
 	DOTSLEEP;
 }

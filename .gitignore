@@ -13,3 +13,4 @@ modunload
 .project
 .tmp_versions
 *.mod.*
+*.log
