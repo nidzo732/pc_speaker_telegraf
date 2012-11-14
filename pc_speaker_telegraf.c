@@ -44,6 +44,8 @@ MODULE_LICENSE("GPL");
 #define PIT2_CONTROLL_PORT 0x43
 #define COUNTDOWN_UPDATE_PORT 0x42
 #define ON_OFF_PORT 0x61
+#define IOCTLCODE_SETFREQ 1
+#define IOCTLCODE_SETDOTLENGTH 2
 
 /*Prototipi funkcija*/
 static int  __init pc_speaker_telegraf_init(void);
@@ -197,7 +199,7 @@ static long telegraf_ioctl(struct file *telegraf_file, unsigned int ioctl_comman
 	if ( !capable(CAP_SYS_ADMIN)) return -EPERM;
 	switch(ioctl_command)
 	{
-		case 1:
+		case IOCTLCODE_SETFREQ:
 		down_interruptible(&ioctl_semafor);
 		freq=ioctl_args;
 		countdown=TIMERFREQ/freq;
@@ -207,7 +209,7 @@ static long telegraf_ioctl(struct file *telegraf_file, unsigned int ioctl_comman
 		up(&ioctl_semafor);
 		return 0;
 		
-		case 3:
+		case IOCTLCODE_SETDOTLENGTH:
 		dotlength=ioctl_args;
 		return 0;
 		
