@@ -47,7 +47,6 @@ MODULE_LICENSE("GPL");
 #define IOCTLCODE_SETFREQ 1
 #define IOCTLCODE_SETDOTLENGTH 2
 
-/*Prototipi funkcija*/
 static int  __init pc_speaker_telegraf_init(void);
 static void __exit pc_speaker_telegraf_exit(void);	
 static ssize_t telegraf_read(struct file *read_file, char __user *readbuffer, size_t read_size, loff_t *location); 
@@ -204,7 +203,7 @@ static long telegraf_ioctl(struct file *telegraf_file, unsigned int ioctl_comman
 		freq=ioctl_args;
 		countdown=TIMERFREQ/freq;
 		countdown%=65536;
-		highbyte=countdown/256;
+		highbyte=countdown>>8;
 		lowbyte=countdown-highbyte;
 		up(&ioctl_semafor);
 		return 0;
@@ -459,7 +458,7 @@ static void playdot(void)
 	spin_lock_irqsave(&play_spinlock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
-	value=value & 0xfc;
+	value=value & 252;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
 	spin_unlock_irqrestore(&play_spinlock, spinlock_flags);
@@ -486,7 +485,7 @@ static void playdash(void)
 	spin_lock_irqsave(&play_spinlock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
-	value=value & 0xfc;
+	value=value & 252;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
 	spin_unlock_irqrestore(&play_spinlock, spinlock_flags);
