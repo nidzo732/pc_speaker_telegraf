@@ -25,8 +25,8 @@
 	#include <asm/barrier.h>
 #endif
 
-MODULE_DESCRIPTION("Modul koji prevodi tekst unet u /dev/telegraf i\
-reprodukuje ga preko pc zvucnika");
+MODULE_DESCRIPTION("A module that translates text written into /dev/telegraf and\
+plays it over the PC speaker");
 MODULE_AUTHOR("Nikola Pavlović <nikola825@gmail.com>");
 MODULE_VERSION("0.1");
 MODULE_LICENSE("GPL");
@@ -34,7 +34,7 @@ MODULE_LICENSE("GPL");
 #define DEFAULTFREQ 500	
 #define DEVNAME "telegraf"
 #define DEVCOUNT 1			
-#define READ_RESPONSE "Ovaj fajl nije namenjen za citanje\nunesite modinfo pc_speaker_telegraf za vise informacija\n"
+#define READ_RESPONSE "This file isn't ment to be read\ntype modinfo pc_speaker_telegraf for more information\n"
 #define PLAY_THREAD_NAME "playthread"
 #define TIMERFREQ 1193180			
 #define DEFAULT_DOTLENGTH 100		
@@ -45,7 +45,7 @@ MODULE_LICENSE("GPL");
 #define COUNTDOWN_UPDATE_PORT 0x42
 #define ON_OFF_PORT 0x61
 #define IOCTLCODE_SETFREQ 1
-#define IOCTLCODE_SETDOTLENGTH 2
+#define IOCTLCODE_SETDOTLENGTH 3
 
 static int  __init pc_speaker_telegraf_init(void);
 static void __exit pc_speaker_telegraf_exit(void);	
@@ -53,7 +53,7 @@ static ssize_t telegraf_read(struct file *read_file, char __user *readbuffer, si
 static ssize_t telegraf_write(struct file *write_file, const char __user *writebuffer, size_t write_size, loff_t *location); 
 static long telegraf_ioctl(struct file *telegraf_file, unsigned int ioctl_command, unsigned long ioctl_args); 
 static void playchar(char letter);
-static int playstring(char *str);
+static int playstring(void *str);
 static void playdot(void);
 static void playdash(void);
 
@@ -65,16 +65,19 @@ static struct file_operations telegraf_fops=
 	.unlocked_ioctl=	telegraf_ioctl,
 };
 
-static enum plstat{PLAYING, STOPPED, FORCE_STOP} play_status=STOPPED;		
+//typedef bool char;
+static enum plstat{FORCE_STOP, GO_ON} play_status=GO_ON;		
 static struct cdev telegraf_cdev;		
 static dev_t telegraf_devnum;			
 static int freq=DEFAULTFREQ;			
 static int countdown=TIMERFREQ/DEFAULTFREQ;	
 static int dotlength=DEFAULT_DOTLENGTH;		
-static struct semaphore write_semafor, ioctl_semafor;	
-static struct completion write_completion;
-static unsigned int highbyte=(TIMERFREQ/DEFAULTFREQ)/256, lowbyte=(TIMERFREQ/DEFAULTFREQ)-((TIMERFREQ/DEFAULTFREQ)/256);
-static spinlock_t play_spinlock;
+static struct semaphore *write_semafor=NULL, *ioctl_semafor=NULL, *read_semafor=NULL;	
+static struct completion *write_completion=NULL;
+static unsigned int highbyte=(TIMERFREQ/DEFAULTFREQ)/256;
+static unsigned int lowbyte=(TIMERFREQ/DEFAULTFREQ)-((TIMERFREQ/DEFAULTFREQ)/256);
+static spinlock_t *play_spinlock=NULL;
+static bool dev_ok=false, cdev_ok=false;
 
 module_param(freq, int, S_IRUGO);
 module_param(dotlength, int, S_IRUGO);
@@ -87,31 +90,56 @@ static int  __init pc_speaker_telegraf_init(void)
 	int errno;
 	//if (request_region(ON_OFF_PORT, 0x01, "controll_register")==NULL) return -ENODEV;
 	//if (request_region(COUNTDOWN_UPDATE_PORT, 0x02, "tajmer")==NULL) return -ENODEV;
-	sema_init(&write_semafor, 1);
-	sema_init(&ioctl_semafor, 1);
-	init_completion(&write_completion);
-	complete(&write_completion);
-	spin_lock_init(&play_spinlock);
+	write_semafor=kmalloc(sizeof(struct semaphore), GFP_KERNEL);
+	ioctl_semafor=kmalloc(sizeof(struct semaphore), GFP_KERNEL);
+	read_semafor=kmalloc(sizeof(struct semaphore), GFP_KERNEL);
+	write_completion=kmalloc(sizeof(struct completion), GFP_KERNEL);
+	play_spinlock=kmalloc(sizeof(spinlock_t), GFP_KERNEL);
+	if (write_semafor==NULL || read_semafor==NULL || ioctl_semafor==NULL || play_spinlock==NULL || write_completion==NULL)
+		goto structure_alloc_fail;
+	sema_init(write_semafor, 1);
+	sema_init(ioctl_semafor, 1);
+	sema_init(read_semafor, 1);
+	init_completion(write_completion);
+	complete(write_completion);
+	spin_lock_init(play_spinlock);
 	errno=alloc_chrdev_region(&telegraf_devnum, 0, DEVCOUNT, DEVNAME);
-	if (errno!=0) goto chrdev_alloc_fail;
+	if (errno!=0) goto chrdev_alloc_fail; else dev_ok=true;
 	cdev_init(&telegraf_cdev, &telegraf_fops);
 	errno=cdev_add(&telegraf_cdev, telegraf_devnum, 1);
-	if (errno!=0) goto cdev_alloc_fail;
+	if (errno!=0) goto cdev_alloc_fail; else cdev_ok=true;
 	return 0;
 	
 	cdev_alloc_fail:
 		cdev_del(&telegraf_cdev);
 	chrdev_alloc_fail:
-		complete(&write_completion);
+		complete(write_completion);
 		unregister_chrdev_region(telegraf_devnum, DEVCOUNT);
+		kfree(write_semafor);
+		kfree(read_semafor);
+		kfree(ioctl_semafor);
+		kfree(write_completion);
+		kfree(play_spinlock);	
 		return -ENODEV;
+	structure_alloc_fail:
+		if (write_semafor!=NULL) kfree(write_semafor);
+		if (read_semafor!=NULL) kfree(read_semafor);
+		if (ioctl_semafor!=NULL) kfree(ioctl_semafor);
+		if (write_completion!=NULL) kfree(write_completion);
+		if (play_spinlock!=NULL) kfree(play_spinlock);
+		return -ENOMEM;
 }
 static void __exit pc_speaker_telegraf_exit(void)
 {
 	play_status=FORCE_STOP;
-	wait_for_completion(&write_completion);
-	cdev_del(&telegraf_cdev);
-	unregister_chrdev_region(telegraf_devnum, DEVCOUNT);
+	wait_for_completion(write_completion);
+	if (cdev_ok) cdev_del(&telegraf_cdev);
+	if (write_semafor!=NULL) kfree(write_semafor);
+	if (read_semafor!=NULL) kfree(read_semafor);
+	if (ioctl_semafor!=NULL) kfree(ioctl_semafor);
+	if (write_completion!=NULL) kfree(write_completion);
+	if (play_spinlock!=NULL) kfree(play_spinlock);
+	if (dev_ok) unregister_chrdev_region(telegraf_devnum, DEVCOUNT);
 	//release_region(ON_OFF_PORT, 0x01);
 }
 
@@ -119,78 +147,95 @@ static ssize_t telegraf_read(struct file *read_file, char __user *readbuffer, si
 {
 	char *response;
 	static enum wr{YES, NO} wasread=NO;	
+	int data_remaining;
+	down_interruptible(read_semafor);
 	if (wasread==YES)
 	{
 		wasread=NO;
+		up(read_semafor);
 		return 0;
 	}
 	response=kmalloc(sizeof(READ_RESPONSE)+1, GFP_KERNEL);
+	if (response==NULL)
+	{
+		up(read_semafor);
+		return -ENOMEM;
+	}
 	strcpy(response, READ_RESPONSE);
 	if (read_size<=strlen(response))
 	{
 		wasread=YES;
-		copy_to_user(readbuffer, response, read_size);
+		data_remaining=copy_to_user(readbuffer, response, read_size);
 		kfree(response);
-		return read_size;
+		up(read_semafor);
+		if (data_remaining) return -EFAULT;
+		else return read_size;
 	}
 	else
 	{
 		wasread=YES;
-		copy_to_user(readbuffer, response, strlen(response));
+		data_remaining=copy_to_user(readbuffer, response, strlen(response));
 		kfree(response);
-		return read_size;
+		up(read_semafor);
+		if (data_remaining) return -EFAULT;
+		else return read_size;
 	}
 }
 static ssize_t telegraf_write(struct file *write_file, const char __user *writebuffer, size_t write_size, loff_t *location)
 {
 	struct task_struct *playthread;
 	char *towrite;
-	if (write_size==0) return write_size;
+	int data_remaining;
 	towrite=kmalloc(write_size+1, GFP_KERNEL);
 	if (towrite==NULL)
 	{
-		printk(KERN_ERR "Neuspela alokacije memorije za unos procesa %s (PID: %d),\
-neuspelo alociranje %lu bajta memorije", current->comm, current->pid, write_size+1);
+		printk(KERN_ERR "Failed to allocate memory for input from process %s (PID: %d),\
+failed to allocate %lu bytes of memmory", current->comm, current->pid, write_size+1);
 		return -ENOMEM;
 	}
-	copy_from_user(towrite, writebuffer, write_size);
+	data_remaining=copy_from_user(towrite, writebuffer, write_size);
+	if (data_remaining)
+	{
+		kfree(towrite);
+		return -EFAULT;
+	}
 	towrite[write_size-1]='\0';
 	if (play_status==FORCE_STOP) 
 	{
 		kfree(towrite);
 		return write_size;
 	}
-	playthread=kthread_create(playstring, towrite, PLAY_THREAD_NAME);
+	playthread=kthread_create(playstring, (void*)towrite, PLAY_THREAD_NAME);
 	wake_up_process(playthread);	
 	return write_size;
 }
 
-static int playstring(char *str)
+static int playstring(void *strw)
 {
 	size_t i;
 	size_t wlen;
+	char *str=(char*)strw;
 	if (play_status==FORCE_STOP) 
 	{
 		kfree(str);
 		return 0;
 	}
-	play_status=PLAYING;
-	down_interruptible(&write_semafor);
-	INIT_COMPLETION(write_completion);	
+	down_interruptible(write_semafor);
+	INIT_COMPLETION(*write_completion);	
 	wlen=strlen(str);
 	for (i=0;i<wlen;i++)
 	{
 		if (play_status==FORCE_STOP) 
 		{
 			kfree(str);
-			complete_and_exit(&write_completion, 0);
+			up(write_semafor);
+			complete_and_exit(write_completion, 0);
 		}
 		playchar(str[i]);
 	}
 	kfree(str);
-	play_status=STOPPED;
-	up(&write_semafor);
-	complete_and_exit(&write_completion, 0);
+	up(write_semafor);
+	complete_and_exit(write_completion, 0);
 }
 
 static long telegraf_ioctl(struct file *telegraf_file, unsigned int ioctl_command, unsigned long ioctl_args)
@@ -199,13 +244,13 @@ static long telegraf_ioctl(struct file *telegraf_file, unsigned int ioctl_comman
 	switch(ioctl_command)
 	{
 		case IOCTLCODE_SETFREQ:
-		down_interruptible(&ioctl_semafor);
+		down_interruptible(ioctl_semafor);
 		freq=ioctl_args;
 		countdown=TIMERFREQ/freq;
 		countdown%=65536;
 		highbyte=countdown>>8;
 		lowbyte=countdown-highbyte;
-		up(&ioctl_semafor);
+		up(ioctl_semafor);
 		return 0;
 		
 		case IOCTLCODE_SETDOTLENGTH:
@@ -430,7 +475,7 @@ static void playchar(char letter)
 			msleep_interruptible(dotlength*4);
 			return;
 		default:
-			printk(KERN_NOTICE "Karakter '%c' nije prepoznat", letter);
+			printk(KERN_NOTICE "Character '%c' not recognized\n", letter);
 			return;
 		}
 		LETTERSLEEP;
@@ -447,21 +492,21 @@ static void playdot(void)
 	smp_mb();
 	outb(highbyte, COUNTDOWN_UPDATE_PORT);
 	smp_mb();
-	spin_lock_irqsave(&play_spinlock, spinlock_flags);
+	spin_lock_irqsave(play_spinlock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value | 3;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(&play_spinlock, spinlock_flags);
+	spin_unlock_irqrestore(play_spinlock, spinlock_flags);
 	msleep_interruptible(dotlength);
-	spin_lock_irqsave(&play_spinlock, spinlock_flags);
+	spin_lock_irqsave(play_spinlock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value & 252;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(&play_spinlock, spinlock_flags);
+	spin_unlock_irqrestore(play_spinlock, spinlock_flags);
 	DOTSLEEP;
 }
 
@@ -474,20 +519,20 @@ static void playdash(void)
 	outb(lowbyte, COUNTDOWN_UPDATE_PORT);
 	smp_mb();
 	outb(highbyte, COUNTDOWN_UPDATE_PORT);
-	spin_lock_irqsave(&play_spinlock, spinlock_flags);
+	spin_lock_irqsave(play_spinlock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value | 3;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(&play_spinlock, spinlock_flags);
+	spin_unlock_irqrestore(play_spinlock, spinlock_flags);
 	msleep_interruptible(dotlength*3);
-	spin_lock_irqsave(&play_spinlock, spinlock_flags);
+	spin_lock_irqsave(play_spinlock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value & 252;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(&play_spinlock, spinlock_flags);
+	spin_unlock_irqrestore(play_spinlock, spinlock_flags);
 	DOTSLEEP;
 }
