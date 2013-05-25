@@ -1,3 +1,4 @@
+/*Fajl za ucitavanje modula i kreiranje fajla uredjaja*/
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
