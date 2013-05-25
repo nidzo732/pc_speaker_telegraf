@@ -1,3 +1,4 @@
+/*Program za uklanjanje modula i brisanje fajla*/
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
