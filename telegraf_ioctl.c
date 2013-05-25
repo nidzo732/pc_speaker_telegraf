@@ -1,3 +1,4 @@
+/*Program za demonstraciju ioctl funkcije*/
 #include <sys/ioctl.h>
 #include <stdlib.h>
 #include <stdio.h>
