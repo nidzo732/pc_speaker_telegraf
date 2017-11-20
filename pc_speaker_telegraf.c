@@ -221,7 +221,7 @@ static int playstring(void *strw)
 		return 0;
 	}
 	down_interruptible(write_semafor);
-	INIT_COMPLETION(*write_completion);	
+	init_completion(write_completion);	
 	wlen=strlen(str);
 	for (i=0;i<wlen;i++)
 	{
