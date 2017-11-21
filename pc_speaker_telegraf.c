@@ -487,21 +487,21 @@ static void playdot(void)
 	smp_mb();
 	outb(highbyte, COUNTDOWN_UPDATE_PORT);
 	smp_mb();
-	spin_lock_irqsave(&i8253_lock, spinlock_flags);
+	raw_spin_lock_irqsave(&i8253_lock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value | 3;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
+	raw_spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
 	msleep_interruptible(dotlength);
-	spin_lock_irqsave(&i8253_lock, spinlock_flags);
+	raw_spin_lock_irqsave(&i8253_lock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value & 252;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
+	raw_spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
 	DOTSLEEP;
 }
 
@@ -514,20 +514,20 @@ static void playdash(void)
 	outb(lowbyte, COUNTDOWN_UPDATE_PORT);
 	smp_mb();
 	outb(highbyte, COUNTDOWN_UPDATE_PORT);
-	spin_lock_irqsave(&i8253_lock, spinlock_flags);
+	raw_spin_lock_irqsave(&i8253_lock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value | 3;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
+	raw_spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
 	msleep_interruptible(dotlength*3);
-	spin_lock_irqsave(&i8253_lock, spinlock_flags);
+	raw_spin_lock_irqsave(&i8253_lock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value & 252;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
+	raw_spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
 	DOTSLEEP;
 }
