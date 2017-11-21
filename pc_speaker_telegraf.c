@@ -19,6 +19,7 @@
 #include <asm/io.h>		/*-||-*/
 #include <linux/spinlock.h>  	/*spin_lock_irqsave(), spin_lock_irqrestore(), spinlock_t*/
 #include <linux/version.h>
+#include <linux/i8253.h>
 #if LINUX_VERSION_CODE<=KERNEL_VERSION(3, 3, 0)
 	#include <asm/system.h>			/*smp_mb()*/
 #else
@@ -76,7 +77,6 @@ static struct semaphore *write_semafor=NULL, *ioctl_semafor=NULL, *read_semafor=
 static struct completion *write_completion=NULL;
 static unsigned int highbyte=(TIMERFREQ/DEFAULTFREQ)/256;
 static unsigned int lowbyte=(TIMERFREQ/DEFAULTFREQ)-((TIMERFREQ/DEFAULTFREQ)/256);
-static spinlock_t *play_spinlock=NULL;
 static bool dev_ok=false, cdev_ok=false;
 
 module_param(freq, int, S_IRUGO);
@@ -94,15 +94,13 @@ static int  __init pc_speaker_telegraf_init(void)
 	ioctl_semafor=kmalloc(sizeof(struct semaphore), GFP_KERNEL);
 	read_semafor=kmalloc(sizeof(struct semaphore), GFP_KERNEL);
 	write_completion=kmalloc(sizeof(struct completion), GFP_KERNEL);
-	play_spinlock=kmalloc(sizeof(spinlock_t), GFP_KERNEL);
-	if (write_semafor==NULL || read_semafor==NULL || ioctl_semafor==NULL || play_spinlock==NULL || write_completion==NULL)
+	if (write_semafor==NULL || read_semafor==NULL || ioctl_semafor==NULL || write_completion==NULL)
 		goto structure_alloc_fail;
 	sema_init(write_semafor, 1);
 	sema_init(ioctl_semafor, 1);
 	sema_init(read_semafor, 1);
 	init_completion(write_completion);
 	complete(write_completion);
-	spin_lock_init(play_spinlock);
 	errno=alloc_chrdev_region(&telegraf_devnum, 0, DEVCOUNT, DEVNAME);
 	if (errno!=0) goto chrdev_alloc_fail; else dev_ok=true;
 	cdev_init(&telegraf_cdev, &telegraf_fops);
@@ -119,14 +117,12 @@ static int  __init pc_speaker_telegraf_init(void)
 		kfree(read_semafor);
 		kfree(ioctl_semafor);
 		kfree(write_completion);
-		kfree(play_spinlock);	
 		return -ENODEV;
 	structure_alloc_fail:
 		if (write_semafor!=NULL) kfree(write_semafor);
 		if (read_semafor!=NULL) kfree(read_semafor);
 		if (ioctl_semafor!=NULL) kfree(ioctl_semafor);
 		if (write_completion!=NULL) kfree(write_completion);
-		if (play_spinlock!=NULL) kfree(play_spinlock);
 		return -ENOMEM;
 }
 static void __exit pc_speaker_telegraf_exit(void)
@@ -138,7 +134,6 @@ static void __exit pc_speaker_telegraf_exit(void)
 	if (read_semafor!=NULL) kfree(read_semafor);
 	if (ioctl_semafor!=NULL) kfree(ioctl_semafor);
 	if (write_completion!=NULL) kfree(write_completion);
-	if (play_spinlock!=NULL) kfree(play_spinlock);
 	if (dev_ok) unregister_chrdev_region(telegraf_devnum, DEVCOUNT);
 	//release_region(ON_OFF_PORT, 0x01);
 }
@@ -492,21 +487,21 @@ static void playdot(void)
 	smp_mb();
 	outb(highbyte, COUNTDOWN_UPDATE_PORT);
 	smp_mb();
-	spin_lock_irqsave(play_spinlock, spinlock_flags);
+	spin_lock_irqsave(&i8253_lock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value | 3;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(play_spinlock, spinlock_flags);
+	spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
 	msleep_interruptible(dotlength);
-	spin_lock_irqsave(play_spinlock, spinlock_flags);
+	spin_lock_irqsave(&i8253_lock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value & 252;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(play_spinlock, spinlock_flags);
+	spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
 	DOTSLEEP;
 }
 
@@ -519,20 +514,20 @@ static void playdash(void)
 	outb(lowbyte, COUNTDOWN_UPDATE_PORT);
 	smp_mb();
 	outb(highbyte, COUNTDOWN_UPDATE_PORT);
-	spin_lock_irqsave(play_spinlock, spinlock_flags);
+	spin_lock_irqsave(&i8253_lock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value | 3;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(play_spinlock, spinlock_flags);
+	spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
 	msleep_interruptible(dotlength*3);
-	spin_lock_irqsave(play_spinlock, spinlock_flags);
+	spin_lock_irqsave(&i8253_lock, spinlock_flags);
 	value=inb(ON_OFF_PORT);
 	smp_mb();
 	value=value & 252;
 	smp_mb();
 	outb(value, ON_OFF_PORT);
-	spin_unlock_irqrestore(play_spinlock, spinlock_flags);
+	spin_unlock_irqrestore(&i8253_lock, spinlock_flags);
 	DOTSLEEP;
 }
